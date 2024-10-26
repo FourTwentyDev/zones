@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Zone Editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="zoneInfo" class="hidden">
+        <div class="info-container">
+            <h2>Zone Editor</h2>
+            <div class="info-row">
+                <span>Points:</span>
+                <span id="pointCount">0</span>
+            </div>
+            <div class="info-row">
+                <span>Area:</span>
+                <span id="area">0</span>
+            </div>
+            <div class="info-row">
+                <span>Perimeter:</span>
+                <span id="perimeter">0</span>
+            </div>
+        </div>
+        <div class="controls">
+            <div class="control-row">
+                <span>Left Click:</span>
+                <span>Place Point</span>
+            </div>
+            <div class="control-row">
+                <span>Backspace:</span>
+                <span>Remove Point</span>
+            </div>
+            <div class="control-row">
+                <span>E:</span>
+                <span>Save Zone</span>
+            </div>
+            <div class="control-row">
+                <span>ESC:</span>
+                <span>Cancel</span>
+            </div>
+        </div>
+    </div>
+    <div id="noclipInfo" class="hidden">
+        <div class="speed-container">
+            <span>NoClip Speed:</span>
+            <span id="speed">Normal</span>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
