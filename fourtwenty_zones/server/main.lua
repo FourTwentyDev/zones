@@ -26,7 +26,7 @@ end
 local function SaveZones()
     if not savedZones then return false end
     
-    local success, encoded = pcall(json.encode, savedZones)
+    local success, encoded = pcall(json.encode, savedZones, {indent = true, pretty = true})
     if success then
         local saved = SaveResourceFile(GetCurrentResourceName(), "zones.json", encoded, -1)
         if saved then

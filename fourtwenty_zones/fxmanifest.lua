@@ -13,6 +13,7 @@ client_scripts {
     'client/main.lua',
     'client/editor.lua',
     'client/visualization.lua',
+    'client/zoneviewer.lua'
 }
 
 server_scripts {

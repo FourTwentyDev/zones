@@ -60,16 +60,16 @@ function ZoneManager.SaveZone(points, name)
     
     -- Create optimized zone structure
     local zone = {
-        points = points,
-        baseZ = baseZ,
-        height = Config.Zone.height,
         name = name,
+        points = points,
         bounds = {
-            minX = minX,
-            minY = minY,
             maxX = maxX,
+            minY = minY, 
+            minX = minX,
             maxY = maxY
-        }
+        },
+        height = Config.Zone.height,
+        baseZ = baseZ
     }
     
     -- Add zone to manager and generate ID

@@ -308,6 +308,25 @@ local function CalculateZoneInfo()
     return math.floor(area), math.floor(perimeter)
 end
 
+-- Helper function for keyboard input
+function KeyboardInput(TextEntry, ExampleText, MaxStringLength)
+    AddTextEntry('FMMC_KEY_TIP1', TextEntry)
+    DisplayOnscreenKeyboard(1, "FMMC_KEY_TIP1", "", ExampleText, "", "", "", MaxStringLength)
+    
+    while UpdateOnscreenKeyboard() ~= 1 and UpdateOnscreenKeyboard() ~= 2 do
+        Citizen.Wait(0)
+    end
+        
+    if UpdateOnscreenKeyboard() ~= 2 then
+        local result = GetOnscreenKeyboardResult()
+        Citizen.Wait(500)
+        return result
+    else
+        Citizen.Wait(500)
+        return nil
+    end
+end
+
 -- Start the zone editor
 -- Start the zone editor
 RegisterCommand('createzone', function()
@@ -377,16 +396,25 @@ RegisterCommand('createzone', function()
             
             -- Confirm zone creation
             if IsControlJustPressed(0, 38) and #currentPoints >= 3 then -- E
-                local zoneName = "Zone_" .. #ZoneManager.zones + 1
-                local zoneId, zone = ZoneManager.SaveZone(currentPoints, zoneName)
-                TriggerEvent('notify', 'Zone ' .. zoneId .. ' created and saved!')
-                
+                -- Temporarily disable editing mode
                 isEditing = false
                 if noclipActive then ToggleNoclip() end
+                
+                -- Request zone name from player
+                local zoneName = KeyboardInput("Enter Zone Name", "", 30)
+                
+                -- If no name entered, use default
+                if zoneName == nil or zoneName == "" then
+                    zoneName = "Zone_" .. #ZoneManager.zones + 1
+                end
+                
+                -- Save zone with name
+                local zoneId, zone = ZoneManager.SaveZone(currentPoints, zoneName)
+                TriggerEvent('notify', 'Zone ' .. zoneName .. ' created and saved!')
+                
                 SendNUIMessage({
                     type = "hideUI"
                 })
-                return
             end
             
             -- Cancel zone creation
@@ -418,6 +446,210 @@ RegisterCommand('createzone', function()
         end
     end)
 end, false)
+
+-- Helper functions for zone management
+local function findZone(nameOrId)
+    -- Try to convert to number for ID lookup
+    local zoneId = tonumber(nameOrId)
+    if zoneId then
+        return zoneId, ZoneManager.zones[zoneId]
+    end
+    
+    -- Search by name (case insensitive)
+    for id, zone in pairs(ZoneManager.zones) do
+        if zone.name:lower() == nameOrId:lower() then
+            return id, zone
+        end
+    end
+    
+    return nil, nil
+end
+
+-- Command to edit an existing zone
+-- Command to edit an existing zone
+RegisterCommand('editzone', function(source, args)
+    if isEditing then return end -- Prevent multiple edit sessions
+    
+    -- Check for required arguments
+    if #args < 1 then
+        TriggerEvent('chat:addMessage', {
+            color = {255, 0, 0},
+            args = {'ZONES', 'Usage: /editzone [id|name]'}
+        })
+        return
+    end
+    
+    -- Find zone by ID or name
+    local zoneId, zone = findZone(args[1])
+    if not zone then
+        TriggerEvent('chat:addMessage', {
+            color = {255, 0, 0},
+            args = {'ZONES', 'Zone not found'}
+        })
+        return
+    end
+    
+    -- Start edit mode
+    TriggerEvent('chat:addMessage', {
+        color = {0, 255, 0},
+        args = {'ZONES', ('Editing zone %s (%d)'):format(zone.name, zoneId)}
+    })
+    
+    -- Initialize edit mode
+    isEditing = true
+    currentPoints = zone.points
+    editingZoneId = zoneId
+    
+    -- Enable noclip if not active
+    if not noclipActive then
+        ToggleNoclip()
+    end
+    
+    -- Show UI with current zone info
+    local area, perimeter = CalculateZoneInfo()
+    SendNUIMessage({
+        type = "showUI",
+        data = {
+            points = #currentPoints,
+            area = area,
+            perimeter = perimeter,
+            editing = true,
+            zoneName = zone.name
+        }
+    })
+    
+    -- Start edit thread
+    Citizen.CreateThread(function()
+        while isEditing do
+            Citizen.Wait(0)
+            HandleNoclipMovement()
+            
+            local hit, groundCoords, hitCoords = GetCrosshairCoords()
+            if hit then
+                tempPoint = groundCoords
+                DrawPlacementGuide(hitCoords, groundCoords)
+                
+                -- Place point
+                if IsControlJustPressed(0, 24) then -- Left Click
+                    table.insert(currentPoints, groundCoords)
+                    PlaySoundFrontend(-1, "PICK_UP", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+                    
+                    local area, perimeter = CalculateZoneInfo()
+                    SendNUIMessage({
+                        type = "updateZoneInfo",
+                        data = {
+                            points = #currentPoints,
+                            area = area,
+                            perimeter = perimeter
+                        }
+                    })
+                end
+                
+                -- Remove point
+                if IsControlJustPressed(0, 194) and #currentPoints > 0 then -- Backspace
+                    table.remove(currentPoints)
+                    PlaySoundFrontend(-1, "CANCEL", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+                    
+                    local area, perimeter = CalculateZoneInfo()
+                    SendNUIMessage({
+                        type = "updateZoneInfo",
+                        data = {
+                            points = #currentPoints,
+                            area = area,
+                            perimeter = perimeter
+                        }
+                    })
+                end
+            end
+            
+            -- Draw zone preview
+            DrawZoneMarkers()
+            
+            -- Save changes
+            if IsControlJustPressed(0, 38) and #currentPoints >= 3 then -- E
+                -- Update the existing zone
+                local updatedZone = {
+                    points = currentPoints,
+                    name = zone.name,
+                    baseZ = currentPoints[1].z,
+                    height = Config.Zone.height,
+                    bounds = {
+                        minX = currentPoints[1].x,
+                        minY = currentPoints[1].y,
+                        maxX = currentPoints[1].x,
+                        maxY = currentPoints[1].y
+                    }
+                }
+                
+                -- Calculate bounds
+                for i = 2, #currentPoints do
+                    updatedZone.bounds.minX = math.min(updatedZone.bounds.minX, currentPoints[i].x)
+                    updatedZone.bounds.minY = math.min(updatedZone.bounds.minY, currentPoints[i].y)
+                    updatedZone.bounds.maxX = math.max(updatedZone.bounds.maxX, currentPoints[i].x)
+                    updatedZone.bounds.maxY = math.max(updatedZone.bounds.maxY, currentPoints[i].y)
+                    updatedZone.baseZ = math.min(updatedZone.baseZ, currentPoints[i].z)
+                end
+                
+                if ZoneManager.UpdateZone(editingZoneId, updatedZone) then
+                    TriggerEvent('chat:addMessage', {
+                        color = {0, 255, 0},
+                        args = {'ZONES', ('Updated zone %s'):format(zone.name)}
+                    })
+                else
+                    TriggerEvent('chat:addMessage', {
+                        color = {255, 0, 0},
+                        args = {'ZONES', 'Failed to update zone'}
+                    })
+                end
+                
+                -- Exit edit mode
+                isEditing = false
+                editingZoneId = nil
+                if noclipActive then ToggleNoclip() end
+                SendNUIMessage({
+                    type = "hideUI"
+                })
+            end
+            
+            -- Cancel editing
+            if IsControlJustPressed(0, 200) then -- ESC
+                isEditing = false
+                editingZoneId = nil
+                if noclipActive then ToggleNoclip() end
+                SendNUIMessage({
+                    type = "hideUI"
+                })
+                TriggerEvent('chat:addMessage', {
+                    color = {255, 223, 0},
+                    args = {'ZONES', 'Cancelled zone editing'}
+                })
+                return
+            end
+            
+            -- Handle noclip speed adjustments
+            if IsControlJustPressed(0, 15) then -- Mouse Wheel Up
+                Config.Noclip.currentSpeedIndex = math.min(#Config.Noclip.speeds, Config.Noclip.currentSpeedIndex + 1)
+                SendNUIMessage({
+                    type = "updateNoclip",
+                    active = true,
+                    speed = Config.Noclip.speeds[Config.Noclip.currentSpeedIndex].name
+                })
+            elseif IsControlJustPressed(0, 14) then -- Mouse Wheel Down
+                Config.Noclip.currentSpeedIndex = math.max(1, Config.Noclip.currentSpeedIndex - 1)
+                SendNUIMessage({
+                    type = "updateNoclip",
+                    active = true,
+                    speed = Config.Noclip.speeds[Config.Noclip.currentSpeedIndex].name
+                })
+            end
+        end
+    end)
+end, false)
+
+
+
+
+
 
 -- Export zone editing functions
 exports('StartZoneEditor', function()
@@ -452,3 +684,4 @@ AddEventHandler('onResourceStop', function(resourceName)
         type = "hideUI"
     })
 end)
+
