@@ -34,7 +34,7 @@ A comprehensive zone management system for FiveM servers that allows for creatin
 3. Add `ensure fourtwenty_zones` to your server.cfg
 4. Start/restart your server
 
-## Usage
+## Usage 
 
 ### In-Game Commands
 
